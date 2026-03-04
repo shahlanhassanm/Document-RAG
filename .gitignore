@@ -1,0 +1,26 @@
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+.env
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Databases and user data
+chroma_db/
+memory_db/
+logs/
+bm25_index.pkl
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
