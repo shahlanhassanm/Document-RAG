@@ -1,60 +1,99 @@
 """
-LLM wrapper for qwen3:8b via Ollama.
-Fully local, no cloud dependencies.
+Optimized and Robust LLM Wrapper for Qwen3:8B.
+Developed for production-grade local AI orchestration.
 """
 
 import ollama
 from langchain_ollama import OllamaLLM
 from core.logger import get_logger
+from typing import List, Optional, Union
 
-log = get_logger("llm")
+# Initialize high-fidelity logger
+log = get_logger("llm_engine")
 
+class OllamaRegistryManager:
+    """Handles verification and lifecycle for local Ollama models."""
+    
+    def __init__(self, host: str = "http://localhost:11434"):
+        self.host = host
 
-def get_llm(temperature: float = 0.3, num_ctx: int = 32768) -> OllamaLLM:
+    def is_server_online(self) -> bool:
+        """Verifies if the Ollama server is responsive."""
+        try:
+            # A simple call to list models serves as a connectivity test
+            ollama.list()
+            return True
+        except Exception as e:
+            log.critical(f"Ollama server unreachable at {self.host}. Error: {e}")
+            return False
+
+    def ensure_model_presence(self, model_name: str, auto_pull: bool = True) -> bool:
+        """
+        Confirms model existence or initiates pull if missing.
+        """
+        try:
+            list_resp = ollama.list()
+            # Modern SDK uses ListResponse object with a 'models' sequence
+            local_models = [m.model for m in list_resp.models] if hasattr(list_resp, 'models') else
+            
+            if any(m.startswith(model_name) for m in local_models):
+                log.info(f"Verified model presence: {model_name}")
+                return True
+            
+            if auto_pull:
+                log.warning(f"Model {model_name} not found locally. Initiating pull...")
+                ollama.pull(model_name)
+                log.info(f"Model {model_name} successfully pulled to local registry.")
+                return True
+            
+            return False
+        except ollama.ResponseError as re:
+            log.error(f"Ollama API error during model check: {re.error}")
+            return False
+        except Exception as e:
+            log.error(f"Unexpected error during registry audit: {e}")
+            return False
+
+def get_llm(
+    temperature: float = 0.3,
+    num_ctx: int = 32768,
+    model_name: str = "qwen3:8b",
+    reasoning_mode: Optional[bool] = None,
+    keep_alive: str = "5m",
+    auto_pull: bool = True
+) -> OllamaLLM:
     """
-    Returns the qwen3:8b LLM instance.
+    Returns a validated and optimized LangChain Ollama LLM instance.
     
     Args:
-        temperature: Lower = more factual. Default 0.3 for grounded answers.
-        num_ctx: Context window size. Default 32K, upgradeable to 128K.
+        temperature: Controls output variance. Default 0.3 for grounded tasks. 
+        num_ctx: Size of the context window. Qwen3 native is 32,768. 
+        model_name: Qualified name of the local model. [5]
+        reasoning_mode: Explicit control for <think> tags. 
+        keep_alive: Memory persistence duration. Use -1 for infinite. 
+        auto_pull: Whether to automatically download a missing model. 
     """
-    log.info(f"Initializing LLM: qwen3:8b (temp={temperature}, ctx={num_ctx})")
+    manager = OllamaRegistryManager()
+    
+    # Pre-flight check: Server connectivity
+    if not manager.is_server_online():
+        raise ConnectionError("Ollama service must be running locally to proceed.")
+
+    # Pre-flight check: Model registry audit
+    if not manager.ensure_model_presence(model_name, auto_pull=auto_pull):
+        raise FileNotFoundError(f"Model {model_name} is unavailable and auto_pull is disabled.")
+
+    log.info(f"Configuring LLM: {model_name} | Temp: {temperature} | Ctx: {num_ctx}")
+    
+    # Instantiate with fail-fast validation and advanced parameters
     llm = OllamaLLM(
-        model="qwen3:8b",
+        model=model_name,
         temperature=temperature,
         num_ctx=num_ctx,
+        keep_alive=keep_alive,
+        validate_model_on_init=True,
+        reasoning=reasoning_mode
     )
-    log.info("LLM ready")
+    
+    log.info(f"LLM Engine {model_name} initialized and ready for inference.")
     return llm
-
-
-def check_model(model_name: str) -> bool:
-    """Check if an Ollama model is available locally."""
-    try:
-        list_resp = ollama.list()
-        if hasattr(list_resp, 'models'):
-            models = [m.model for m in list_resp.models]
-        else:
-            models = [m.get('name', '') for m in list_resp.get('models', [])]
-        
-        for existing in models:
-            if existing.startswith(model_name):
-                log.debug(f"Model '{model_name}' found as '{existing}'")
-                return True
-        
-        log.warning(f"Model '{model_name}' not found in Ollama")
-        return False
-    except Exception as e:
-        log.error(f"Error checking Ollama models: {e}")
-        return False
-
-
-def get_available_models() -> list[str]:
-    """Returns list of all available Ollama models."""
-    try:
-        list_resp = ollama.list()
-        if hasattr(list_resp, 'models'):
-            return [m.model for m in list_resp.models]
-        return [m.get('name', '') for m in list_resp.get('models', [])]
-    except Exception:
-        return []

@@ -1,0 +1,59 @@
+logs/rag_20260305.log:353: 2026-03-05 11:45:26 | app                  | ERROR    | File processing error: Database error: error returned from database: (code: 1) no such table: tenants
+logs/rag_20260305.log:354: Traceback (most recent call last):
+logs/rag_20260305.log:385: chromadb.errors.InternalError: Database error: error returned from database: (code: 1) no such table: tenants
+logs/rag_20260305.log:402: 2026-03-05 11:45:37 | app                  | ERROR    | File processing error: Database error: error returned from database: (code: 1) no such table: tenants
+logs/rag_20260305.log:403: Traceback (most recent call last):
+logs/rag_20260305.log:434: chromadb.errors.InternalError: Database error: error returned from database: (code: 1) no such table: tenants
+logs/rag_20260305.log:461: 2026-03-05 11:47:16 | app                  | ERROR    | File processing error: Database error: error returned from database: (code: 1) no such table: tenants
+logs/rag_20260305.log:462: Traceback (most recent call last):
+logs/rag_20260305.log:493: chromadb.errors.InternalError: Database error: error returned from database: (code: 1) no such table: tenants
+logs/rag_20260305.log:514: 2026-03-05 11:47:21 | app                  | ERROR    | File processing error: Database error: error returned from database: (code: 1) no such table: tenants
+logs/rag_20260305.log:515: Traceback (most recent call last):
+logs/rag_20260305.log:546: chromadb.errors.InternalError: Database error: error returned from database: (code: 1) no such table: tenants
+logs/rag_20260305.log:571: 2026-03-05 11:47:25 | app                  | ERROR    | File processing error: Database error: error returned from database: (code: 1) no such table: tenants
+logs/rag_20260305.log:572: Traceback (most recent call last):
+logs/rag_20260305.log:603: chromadb.errors.InternalError: Database error: error returned from database: (code: 1) no such table: tenants
+logs/rag_20260305.log:632: 2026-03-05 11:47:26 | app                  | ERROR    | File processing error: Database error: error returned from database: (code: 1) no such table: tenants
+logs/rag_20260305.log:633: Traceback (most recent call last):
+logs/rag_20260305.log:664: chromadb.errors.InternalError: Database error: error returned from database: (code: 1) no such table: tenants
+logs/rag_20260305.log:684: 2026-03-05 11:47:27 | app                  | ERROR    | File processing error: Database error: error returned from database: (code: 1) no such table: tenants
+logs/rag_20260305.log:685: Traceback (most recent call last):
+logs/rag_20260305.log:716: chromadb.errors.InternalError: Database error: error returned from database: (code: 1) no such table: tenants
+logs/rag_20260305.log:740: 2026-03-05 11:47:28 | app                  | ERROR    | File processing error: Database error: error returned from database: (code: 1) no such table: tenants
+logs/rag_20260305.log:741: Traceback (most recent call last):
+logs/rag_20260305.log:772: chromadb.errors.InternalError: Database error: error returned from database: (code: 1) no such table: tenants
+logs/rag_20260305.log:775: 2026-03-05 11:47:28 | app                  | ERROR    | File processing error: Database error: error returned from database: (code: 1) no such table: tenants
+logs/rag_20260305.log:776: Traceback (most recent call last):
+logs/rag_20260305.log:807: chromadb.errors.InternalError: Database error: error returned from database: (code: 1) no such table: tenants
+logs/rag_20260305.log:822: 2026-03-05 11:47:32 | app                  | ERROR    | File processing error: Database error: error returned from database: (code: 1) no such table: tenants
+logs/rag_20260305.log:823: Traceback (most recent call last):
+logs/rag_20260305.log:854: chromadb.errors.InternalError: Database error: error returned from database: (code: 1) no such table: tenants
+logs/rag_20260305.log:873: 2026-03-05 11:47:35 | app                  | ERROR    | File processing error: Database error: error returned from database: (code: 1) no such table: tenants
+logs/rag_20260305.log:874: Traceback (most recent call last):
+logs/rag_20260305.log:905: chromadb.errors.InternalError: Database error: error returned from database: (code: 1) no such table: tenants
+logs/rag_20260305.log:917: 2026-03-05 11:47:36 | app                  | ERROR    | File processing error: Database error: error returned from database: (code: 1) no such table: tenants
+logs/rag_20260305.log:918: Traceback (most recent call last):
+logs/rag_20260305.log:949: chromadb.errors.InternalError: Database error: error returned from database: (code: 1) no such table: tenants
+logs/rag_20260305.log:974: 2026-03-05 11:56:42 | app                  | ERROR    | File processing error: Database error: error returned from database: (code: 1) no such table: tenants
+logs/rag_20260305.log:975: Traceback (most recent call last):
+logs/rag_20260305.log:1006: chromadb.errors.InternalError: Database error: error returned from database: (code: 1) no such table: tenants
+logs/rag_20260305.log:1447: 2026-03-05 13:23:14 | app                  | ERROR    | File processing error: <DataNotMatchException: (code=1, message=Insert missed an field `source` to collection without set nullable==true or set default_value)>
+logs/rag_20260305.log:1448: Traceback (most recent call last):
+logs/rag_20260305.log:1464: self._handle_batch_operation_exception(
+logs/rag_20260305.log:1465: File "C:\Users\Admin\.gemini\antigravity\scratch\qwen-rag\venv\Lib\site-packages\langchain_milvus\vectorstores\milvus.py", line 1552, in _handle_batch_operation_exception
+logs/rag_20260305.log:1503: raise DataNotMatchException(
+logs/rag_20260305.log:1504: pymilvus.exceptions.DataNotMatchException: <DataNotMatchException: (code=1, message=Insert missed an field `source` to collection without set nullable==true or set default_value)>
+logs/rag_20260305.log:1632: 2026-03-05 14:30:57 | query_transform      | WARNING  | HyDE transform failed: model requires more system memory (9.5 GiB) than is available (8.8 GiB) (status code: 500). Using original query.
+logs/rag_20260305.log:1988: 2026-03-05 16:03:30 | app                  | ERROR    | Query error: _load_milvus() takes 0 positional arguments but 1 was given
+logs/rag_20260305.log:1989: Traceback (most recent call last):
+logs/rag_20260305.log:2001: TypeError: _load_milvus() takes 0 positional arguments but 1 was given
+logs/rag_20260305.log:2019: 2026-03-05 16:06:17 | app                  | ERROR    | Query error: _load_milvus() takes 0 positional arguments but 1 was given
+logs/rag_20260305.log:2020: Traceback (most recent call last):
+logs/rag_20260305.log:2032: TypeError: _load_milvus() takes 0 positional arguments but 1 was given
+logs/rag_20260305.log:2055: 2026-03-05 16:09:08 | app                  | ERROR    | Query error: _load_milvus() takes 0 positional arguments but 1 was given
+logs/rag_20260305.log:2056: Traceback (most recent call last):
+logs/rag_20260305.log:2068: TypeError: _load_milvus() takes 0 positional arguments but 1 was given
+logs/rag_20260305.log:2442: 2026-03-05 16:31:29 | app                  | ERROR    | Query error: <MilvusException: (code=65535, message=fail to search on QueryNode 1: worker(1) query failed:  => vector dimension mismatch, expected vector size(byte) 3072, actual 4096. at /workspace/source/internal/core/src/query/Plan.cpp:64
+logs/rag_20260305.log:2444: Traceback (most recent call last):
+logs/rag_20260305.log:2502: raise MilvusException(status.code, status.reason, status.error_code)
+logs/rag_20260305.log:2503: pymilvus.exceptions.MilvusException: <MilvusException: (code=65535, message=fail to search on QueryNode 1: worker(1) query failed:  => vector dimension mismatch, expected vector size(byte) 3072, actual 4096. at /workspace/source/internal/core/src/query/Plan.cpp:64

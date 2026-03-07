@@ -28,7 +28,7 @@ User question: {question}
 Optimized search query:"""
 
 
-def hyde_transform(question: str) -> str:
+def hyde_transform(question: str, model_name: str = "qwen3:8b") -> str:
     """
     Hypothetical Document Embeddings (HyDE).
     
@@ -46,7 +46,7 @@ def hyde_transform(question: str) -> str:
     log.info(f"HyDE transform for: '{question[:80]}...'")
     
     try:
-        llm = get_llm(temperature=0.3)
+        llm = get_llm(temperature=0.3, model_name=model_name)
         prompt = HYDE_PROMPT.format(question=question)
         hypothetical_answer = llm.invoke(prompt)
         
@@ -61,7 +61,7 @@ def hyde_transform(question: str) -> str:
         return question
 
 
-def rewrite_query(question: str) -> str:
+def rewrite_query(question: str, model_name: str = "qwen3:8b") -> str:
     """
     Rewrite a verbose or vague query into a keyword-rich search query.
     
@@ -74,7 +74,7 @@ def rewrite_query(question: str) -> str:
     log.info(f"Rewriting query: '{question[:80]}...'")
     
     try:
-        llm = get_llm(temperature=0.1)
+        llm = get_llm(temperature=0.1, model_name=model_name)
         prompt = REWRITE_PROMPT.format(question=question)
         rewritten = llm.invoke(prompt)
         

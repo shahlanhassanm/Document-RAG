@@ -1,45 +1,56 @@
 """
-Persistent Vector-Based Conversation Memory.
-Stores past Q&A pairs in a separate ChromaDB collection for semantic recall.
+Persistent Vector-Based Conversation Memory — Milvus Backend.
+Stores past Q&A pairs in a separate Milvus collection for semantic recall.
 """
 
 import os
 import uuid
 from datetime import datetime
-from langchain_chroma import Chroma
+from langchain_milvus import Milvus
 from langchain_core.documents import Document
+from pymilvus import connections, utility
 from core.embeddings import get_embeddings
 from core.logger import get_logger
 
 log = get_logger("memory")
 
-MEMORY_DIR = os.path.join(os.path.dirname(__file__), '..', 'memory_db')
-COLLECTION_NAME = "conversation_memory"
+# Milvus connection config (same server as vector_store)
+MILVUS_HOST = "127.0.0.1"
+MILVUS_PORT = "19530"
+MEMORY_COLLECTION = "conversation_memory"
 
 
-def _get_memory_store() -> Chroma:
-    """Get or create the memory ChromaDB collection."""
+def _connect_milvus():
+    """Ensure a connection to the Milvus server exists."""
+    try:
+        connections.connect("default", host=MILVUS_HOST, port=MILVUS_PORT)
+    except Exception as e:
+        log.debug(f"Milvus connection note: {e}")
+
+
+def _get_memory_store() -> Milvus:
+    """Get or create the memory Milvus collection."""
     embeddings = get_embeddings()
-    return Chroma(
-        persist_directory=MEMORY_DIR,
+    return Milvus(
         embedding_function=embeddings,
-        collection_name=COLLECTION_NAME,
+        collection_name=MEMORY_COLLECTION,
+        connection_args={"host": MILVUS_HOST, "port": MILVUS_PORT},
     )
 
 
 def store_exchange(question: str, answer: str, session_id: str = "default"):
     """
     Store a Q&A exchange in persistent vector memory.
-    
+
     Args:
         question: User's question
         answer: Assistant's answer
         session_id: Session identifier for grouping conversations
     """
     log.info(f"Storing exchange in memory (session: {session_id})")
-    
+
     store = _get_memory_store()
-    
+
     # Combine Q&A into a single document for semantic search
     content = f"Question: {question}\nAnswer: {answer}"
     doc = Document(
@@ -51,7 +62,7 @@ def store_exchange(question: str, answer: str, session_id: str = "default"):
             "type": "conversation",
         }
     )
-    
+
     store.add_documents([doc], ids=[str(uuid.uuid4())])
     log.debug("Exchange stored in memory")
 
@@ -59,23 +70,23 @@ def store_exchange(question: str, answer: str, session_id: str = "default"):
 def recall_relevant(query: str, top_k: int = 3) -> list[dict]:
     """
     Retrieve the top-k most semantically relevant past exchanges.
-    
+
     Args:
         query: Current user question
         top_k: Number of past exchanges to retrieve
-    
+
     Returns:
         List of dicts with 'question', 'answer', 'timestamp' keys
     """
-    if not os.path.exists(MEMORY_DIR):
+    if not memory_exists():
         return []
-    
+
     log.debug(f"Recalling top-{top_k} relevant past exchanges")
-    
+
     try:
         store = _get_memory_store()
         results = store.similarity_search(query, k=top_k)
-        
+
         exchanges = []
         for doc in results:
             content = doc.page_content
@@ -89,7 +100,7 @@ def recall_relevant(query: str, top_k: int = 3) -> list[dict]:
                     "answer": a,
                     "timestamp": doc.metadata.get("timestamp", ""),
                 })
-        
+
         log.info(f"Recalled {len(exchanges)} relevant past exchanges")
         return exchanges
     except Exception as e:
@@ -100,14 +111,14 @@ def recall_relevant(query: str, top_k: int = 3) -> list[dict]:
 def get_recent_messages(messages: list[dict], n: int = 5) -> str:
     """
     Format the last n messages as conversation context string.
-    
+
     Args:
         messages: List of {"role": ..., "content": ...} dicts
         n: Number of recent messages to include
     """
     if not messages:
         return ""
-    
+
     recent = messages[-n:]
     lines = []
     for m in recent:
@@ -118,22 +129,22 @@ def get_recent_messages(messages: list[dict], n: int = 5) -> str:
 
 def clear_memory():
     """Wipe all conversation memory."""
-    import shutil
     import gc
     gc.collect()
-    
-    if os.path.exists(MEMORY_DIR):
-        def on_rm_error(func, path, exc_info):
-            import stat
-            os.chmod(path, stat.S_IWRITE)
-            try:
-                func(path)
-            except Exception:
-                pass
-        shutil.rmtree(MEMORY_DIR, onerror=on_rm_error)
-        log.info("Conversation memory cleared")
+
+    try:
+        _connect_milvus()
+        if utility.has_collection(MEMORY_COLLECTION):
+            utility.drop_collection(MEMORY_COLLECTION)
+            log.info(f"Milvus memory collection '{MEMORY_COLLECTION}' dropped")
+    except Exception as e:
+        log.warning(f"Failed to clear memory: {e}")
 
 
 def memory_exists() -> bool:
     """Check if memory store exists."""
-    return os.path.exists(MEMORY_DIR)
+    try:
+        _connect_milvus()
+        return utility.has_collection(MEMORY_COLLECTION)
+    except Exception:
+        return False

@@ -2,14 +2,14 @@ streamlit
 langchain
 langchain-core
 langchain-ollama
-langchain-chroma
+langchain-milvus
 langchain-text-splitters
 langchain-community
 pymupdf
 python-docx
 python-pptx
 openpyxl
-chromadb
+pymilvus
 ollama
 rank-bm25
 flashrank

@@ -1,6 +1,6 @@
 """
 Advanced Local RAG System — Streamlit UI
-Qwen3 + ChromaDB + Multi-Stage Retrieval
+Qwen3 + Milvus + Multi-Stage Retrieval
 100% Local · Zero Cloud · Maximum Privacy
 """
 
@@ -26,10 +26,22 @@ st.set_page_config(
 # Disable telemetry
 os.environ["STREAMLIT_BROWSER_GATHER_USAGE_STATS"] = "false"
 
-# ─── Premium Dark CSS ───
+# Initialize state from persistent store if UI was refreshed
+if store_exists() and "current_files" not in st.session_state:
+    try:
+        from core.vector_store import _load_bm25
+        _, chunks = _load_bm25()
+        sources = set(doc.metadata.get("source", "Unknown") for doc in chunks)
+        st.session_state.current_files = list(sources)
+        st.session_state.chunk_count = len(chunks)
+        log.info(f"Loaded {len(sources)} files and {len(chunks)} chunks from persistent store into UI state.")
+    except Exception as e:
+        log.error(f"Failed to load persistent store into UI state: {e}")
+
+# ─── Premium Glassmorphic CSS ───
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@300;400;500;700&display=swap');
 
     /* Hide Streamlit chrome */
     #MainMenu, footer, header,
@@ -37,269 +49,372 @@ st.markdown("""
     div[data-testid="stDecoration"],
     div[data-testid="stStatusWidget"] { display: none !important; }
 
-    /* Background */
-    .stApp { background: #080808 !important; }
+    /* Animated Mesh Gradient Background */
+    .stApp {
+        background: linear-gradient(-45deg, #020617, #1e1b4b, #0f172a, #312e81) !important;
+        background-size: 400% 400% !important;
+        animation: gradientBG 15s ease infinite !important;
+    }
+    @keyframes gradientBG {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+    }
 
-    /* Typography */
+    /* Global Typography */
     .stApp, .stApp * {
         font-family: 'Inter', -apple-system, sans-serif !important;
     }
+    .stApp span.material-symbols-rounded, 
+    .stApp span.material-icons,
+    .stApp span[data-testid="stIconMaterial"] {
+        font-family: "Material Symbols Rounded", "Material Icons" !important;
+    }
     .stMarkdown p, .stMarkdown li {
-        color: #a0a0a0;
+        color: #cbd5e1;
         font-weight: 300;
-        font-size: 0.9rem;
+        font-size: 0.95rem;
         line-height: 1.75;
     }
     .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {
-        font-family: 'Space Grotesk', sans-serif !important;
-        color: #e0e0e0 !important;
+        font-family: 'Outfit', sans-serif !important;
+        color: #f8fafc !important;
         font-weight: 500 !important;
     }
 
-    /* Sidebar */
+    /* Sidebar (Frosted Glass) */
     section[data-testid="stSidebar"] {
-        background: #0a0a0a !important;
-        border-right: 1px solid #151515 !important;
+        background: rgba(15, 23, 42, 0.4) !important;
+        backdrop-filter: blur(20px) !important;
+        -webkit-backdrop-filter: blur(20px) !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
     }
 
-    /* Buttons */
+    /* Buttons (Glass & Glow) */
     .stButton > button {
-        background: #111 !important;
-        border: 1px solid #1e1e1e !important;
-        color: #888 !important;
-        font-weight: 400 !important;
-        font-size: 0.8rem !important;
-        border-radius: 8px !important;
-        transition: all 0.3s ease !important;
+        background: rgba(255, 255, 255, 0.03) !important;
+        backdrop-filter: blur(10px) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        color: #e2e8f0 !important;
+        font-weight: 500 !important;
+        font-size: 0.85rem !important;
+        border-radius: 12px !important;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
         letter-spacing: 0.5px !important;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
     }
     .stButton > button:hover {
-        border-color: #3a3a3a !important;
-        color: #ddd !important;
-        background: #161616 !important;
-        transform: translateY(-1px) !important;
-        box-shadow: 0 4px 16px rgba(0,0,0,0.5) !important;
+        border-color: rgba(139, 92, 246, 0.5) !important;
+        color: #fff !important;
+        background: rgba(139, 92, 246, 0.15) !important;
+        transform: translateY(-2px) !important;
+        box-shadow: 0 10px 25px -5px rgba(139, 92, 246, 0.4) !important;
     }
 
-    /* Chat */
+    /* Chat Messages (Floating Glass Bubbles) */
     .stChatMessage {
-        background: rgba(255,255,255,0.015) !important;
-        border: 1px solid #141414 !important;
-        border-radius: 12px !important;
-        transition: border-color 0.3s ease;
+        padding: 1.2rem !important;
+        background: transparent !important;
     }
-    .stChatMessage:hover { border-color: #1e1e1e !important; }
+    .stChatMessage[data-testid="stChatMessage"] {
+        background: rgba(255, 255, 255, 0.02) !important;
+        backdrop-filter: blur(16px) !important;
+        -webkit-backdrop-filter: blur(16px) !important;
+        border: 1px solid rgba(255, 255, 255, 0.05) !important;
+        border-radius: 20px !important;
+        margin-bottom: 1rem !important;
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.2) !important;
+    }
+    div[data-testid="stChatMessage"] div[data-testid="stMarkdownContainer"] p {
+        font-size: 0.98rem !important;
+        line-height: 1.65 !important;
+        color: #e2e8f0;
+    }
 
+    /* Chat Input */
     .stChatInput > div {
-        border: 1px solid #1e1e1e !important;
-        border-radius: 12px !important;
-        background: #0e0e0e !important;
-        transition: border-color 0.3s ease !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        border-radius: 16px !important;
+        background: rgba(15, 23, 42, 0.6) !important;
+        backdrop-filter: blur(20px) !important;
+        transition: all 0.3s ease !important;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.3) !important;
     }
-    .stChatInput > div:focus-within { border-color: #3a3a3a !important; }
-    .stChatInput textarea { color: #ddd !important; font-size: 0.9rem !important; }
-    .stChatInput textarea::placeholder { color: #555 !important; }
+    .stChatInput > div:focus-within { 
+        border-color: #8b5cf6 !important; 
+        box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.3), 0 8px 32px rgba(0,0,0,0.4) !important;
+    }
+    .stChatInput textarea { color: #f8fafc !important; font-size: 0.95rem !important; }
+    .stChatInput textarea::placeholder { color: #64748b !important; }
 
     /* File uploader */
     section[data-testid="stFileUploader"] {
-        border: 1px dashed #1a1a1a !important;
-        border-radius: 10px;
-        transition: border-color 0.3s ease;
+        background: rgba(255, 255, 255, 0.02) !important;
+        backdrop-filter: blur(10px) !important;
+        border: 1px dashed rgba(255, 255, 255, 0.15) !important;
+        border-radius: 12px;
+        transition: all 0.3s ease;
     }
-    section[data-testid="stFileUploader"]:hover { border-color: #333 !important; }
+    section[data-testid="stFileUploader"]:hover { 
+        border-color: #8b5cf6 !important; 
+        background: rgba(139, 92, 246, 0.05) !important;
+    }
 
     /* Expanders */
     div[data-testid="stExpander"] {
-        background: rgba(255,255,255,0.015) !important;
-        border: 1px solid #141414 !important;
-        border-radius: 8px !important;
+        background: transparent !important;
+        border: none !important;
+        border-radius: 4px !important;
         box-shadow: none !important;
+        margin-top: 0px !important;
     }
     div[data-testid="stExpander"] summary {
-        color: #e0e0e0 !important;
-        font-family: 'Inter', sans-serif !important;
+        color: #94a3b8 !important;
+        font-family: 'Outfit', sans-serif !important;
         font-size: 0.85rem !important;
+        padding-left: 0 !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 8px !important;
     }
     div[data-testid="stExpander"] summary:hover {
-        color: #fff !important;
+        color: #c4b5fd !important;
         background: transparent !important;
     }
-    div[data-testid="stExpander"] svg {
-        fill: #888 !important;
+    div[data-testid="stExpander"] summary svg,
+    div[data-testid="stExpander"] summary span.material-symbols-rounded,
+    div[data-testid="stExpander"] summary [data-testid="stIconMaterial"] {
+        display: none !important;
     }
+    div[data-testid="stExpander"] summary::before {
+        content: "▶" !important;
+        font-size: 0.75rem !important;
+        color: #8b5cf6 !important;
+        transition: transform 0.2s ease !important;
+    }
+    div[data-testid="stExpander"][open] summary::before {
+        transform: rotate(90deg) !important;
+    }
+    div[data-testid="stExpanderDetails"] {
+        background: rgba(255, 255, 255, 0.02) !important;
+        backdrop-filter: blur(10px) !important;
+        border: 1px solid rgba(255, 255, 255, 0.06) !important;
+        border-radius: 12px !important;
+        padding: 12px !important;
+        box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.05) !important;
+    }
+
     /* Scrollbar */
-    ::-webkit-scrollbar { width: 3px; }
-    ::-webkit-scrollbar-track { background: #080808; }
-    ::-webkit-scrollbar-thumb { background: #1a1a1a; border-radius: 3px; }
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 5px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(139, 92, 246, 0.5); }
 
     /* Selection */
-    ::selection { background: #2a2a2a; color: white; }
+    ::selection { background: rgba(139, 92, 246, 0.4); color: white; }
 
     /* ─── Custom Components ─── */
     .app-header {
         text-align: center;
-        padding: 2rem 0 0.5rem;
+        padding: 3rem 0 1rem;
     }
     .app-logo {
-        font-family: 'Space Grotesk', sans-serif;
-        font-size: 0.6rem;
-        font-weight: 600;
-        letter-spacing: 6px;
+        font-family: 'Outfit', sans-serif;
+        font-size: 0.75rem;
+        font-weight: 700;
+        letter-spacing: 8px;
         text-transform: uppercase;
-        color: #3a3a3a;
+        background: linear-gradient(to right, #38bdf8, #8b5cf6);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
         margin-bottom: 0.8rem;
     }
     .app-title {
-        font-family: 'Space Grotesk', sans-serif;
-        font-size: 2rem;
+        font-family: 'Outfit', sans-serif;
+        font-size: 3rem;
         font-weight: 700;
-        color: #e8e8e8;
+        color: #fff;
         margin: 0;
-        letter-spacing: -0.5px;
+        letter-spacing: -1px;
+        text-shadow: 0 4px 20px rgba(139, 92, 246, 0.3);
     }
     .app-subtitle {
         font-family: 'Inter', sans-serif;
-        font-size: 0.82rem;
-        color: #404040;
-        font-weight: 300;
-        margin-top: 0.5rem;
-        letter-spacing: 0.3px;
+        font-size: 0.9rem;
+        color: #94a3b8;
+        font-weight: 400;
+        margin-top: 0.8rem;
+        letter-spacing: 0.5px;
     }
     .thin-rule {
         height: 1px;
-        background: linear-gradient(90deg, transparent, #1a1a1a, transparent);
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
         border: none;
-        margin: 1.5rem 0;
+        margin: 2rem 0;
     }
     .privacy-banner {
         text-align: center;
-        padding: 6px 12px;
-        background: rgba(34, 197, 94, 0.06);
-        border: 1px solid rgba(34, 197, 94, 0.12);
-        border-radius: 8px;
-        margin: 0.5rem auto 1rem;
-        max-width: 320px;
+        padding: 6px 16px;
+        background: rgba(16, 185, 129, 0.1);
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(16, 185, 129, 0.2);
+        border-radius: 20px;
+        margin: 1rem auto;
+        display: inline-block;
     }
     .privacy-text {
-        font-family: 'Inter', sans-serif;
-        font-size: 0.68rem;
-        color: #2d8a56;
+        font-family: 'Outfit', sans-serif;
+        font-size: 0.7rem;
+        color: #34d399;
         letter-spacing: 1.5px;
         text-transform: uppercase;
-        font-weight: 500;
+        font-weight: 600;
     }
     .stat-row {
         display: flex;
         justify-content: center;
-        gap: 2rem;
-        padding: 0.8rem 0;
+        gap: 3rem;
+        padding: 1rem 0;
+        background: rgba(255,255,255,0.01);
+        border-radius: 16px;
+        border: 1px solid rgba(255,255,255,0.03);
     }
     .stat-item { text-align: center; }
     .stat-label {
-        font-family: 'Inter', sans-serif;
-        font-size: 0.6rem;
-        color: #3a3a3a;
-        letter-spacing: 1.5px;
+        font-family: 'Outfit', sans-serif;
+        font-size: 0.65rem;
+        color: #64748b;
+        letter-spacing: 2px;
         text-transform: uppercase;
+        font-weight: 500;
     }
     .stat-value {
-        font-family: 'Space Grotesk', sans-serif;
-        font-size: 0.85rem;
-        color: #777;
-        margin-top: 2px;
+        font-family: 'Outfit', sans-serif;
+        font-size: 1rem;
+        color: #e2e8f0;
+        margin-top: 6px;
+        font-weight: 600;
+        text-shadow: 0 2px 10px rgba(255,255,255,0.1);
     }
     .section-label {
-        font-family: 'Inter', sans-serif;
-        font-size: 0.6rem;
+        font-family: 'Outfit', sans-serif;
+        font-size: 0.65rem;
         letter-spacing: 3px;
         text-transform: uppercase;
-        color: #2a2a2a;
-        margin-bottom: 0.5rem;
+        color: #64748b;
+        margin-bottom: 0.8rem;
+        font-weight: 600;
     }
     .status-dot {
         display: inline-block;
-        width: 5px; height: 5px;
+        width: 8px; height: 8px;
         border-radius: 50%;
-        margin-right: 5px;
+        margin-right: 8px;
         position: relative; top: -1px;
     }
-    .dot-on { background: #2d8a56; box-shadow: 0 0 6px rgba(45,138,86,0.3); }
-    .dot-off { background: #222; }
+    .dot-on { background: #34d399; box-shadow: 0 0 12px rgba(52, 211, 153, 0.6); }
+    .dot-off { background: #334155; }
     .pill {
         display: inline-block;
-        padding: 2px 8px;
-        border-radius: 12px;
-        font-size: 0.65rem;
-        font-family: 'Inter', sans-serif;
-        letter-spacing: 0.3px;
-        margin: 1px 0;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.7rem;
+        font-family: 'Outfit', sans-serif;
+        font-weight: 500;
+        letter-spacing: 0.5px;
+        margin: 4px 0;
+        backdrop-filter: blur(8px);
     }
     .pill-on {
-        background: rgba(255,255,255,0.03);
-        border: 1px solid #1e1e1e;
-        color: #666;
+        background: rgba(139, 92, 246, 0.1);
+        border: 1px solid rgba(139, 92, 246, 0.3);
+        color: #c4b5fd;
+        box-shadow: 0 4px 12px rgba(139, 92, 246, 0.1);
     }
     .pill-off {
-        background: transparent;
-        border: 1px solid #141414;
-        color: #2a2a2a;
+        background: rgba(255,255,255,0.02);
+        border: 1px solid rgba(255,255,255,0.05);
+        color: #64748b;
     }
     .pipeline-box {
         background: rgba(255,255,255,0.02);
-        border: 1px solid #141414;
-        border-radius: 8px;
-        padding: 10px 14px;
-        margin-top: 8px;
-        font-size: 0.75rem;
-        color: #555;
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255,255,255,0.05);
+        border-radius: 12px;
+        padding: 12px 16px;
+        margin-top: 10px;
+        font-size: 0.8rem;
+        color: #cbd5e1;
         font-family: 'Inter', sans-serif;
     }
     .pipeline-step {
         display: inline-block;
-        padding: 2px 6px;
-        background: rgba(255,255,255,0.03);
-        border-radius: 4px;
-        font-size: 0.65rem;
-        color: #555;
-        margin: 1px 2px;
+        padding: 3px 8px;
+        background: rgba(255,255,255,0.05);
+        border-radius: 6px;
+        font-size: 0.7rem;
+        color: #e2e8f0;
+        margin: 3px;
+        border: 1px solid rgba(255,255,255,0.08);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .pipeline-step:not(:last-child)::after {
+        content: "→";
+        margin-left: 10px;
+        margin-right: -2px;
+        color: #64748b;
+        font-family: system-ui, -apple-system, sans-serif;
     }
     .source-tag {
         display: inline-block;
-        padding: 2px 8px;
-        background: rgba(45,138,86,0.08);
-        border: 1px solid rgba(45,138,86,0.15);
-        border-radius: 6px;
-        font-size: 0.7rem;
-        color: #2d8a56;
-        margin: 2px 3px;
-        font-family: 'Inter', sans-serif;
+        padding: 3px 10px;
+        background: rgba(56, 189, 248, 0.1);
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(56, 189, 248, 0.25);
+        border-radius: 8px;
+        font-size: 0.75rem;
+        color: #7dd3fc;
+        margin: 3px 4px;
+        font-family: 'Outfit', sans-serif;
+        font-weight: 500;
+        transition: all 0.2s ease;
+    }
+    .source-tag:hover {
+        background: rgba(56, 189, 248, 0.2);
+        transform: translateY(-1px);
     }
 
     /* Thinking indicator */
     .thinking-indicator {
         display: flex;
         align-items: center;
-        gap: 8px;
-        padding: 8px 0;
+        gap: 12px;
+        padding: 12px 0;
     }
-    .thinking-dots { display: flex; gap: 4px; }
+    .thinking-dots { display: flex; gap: 6px; }
     .thinking-dots span {
-        width: 5px; height: 5px;
+        width: 6px; height: 6px;
         border-radius: 50%;
-        background: #444;
+        background: #a78bfa;
         animation: pulse-dot 1.4s ease-in-out infinite;
     }
     .thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
     .thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
     @keyframes pulse-dot {
-        0%, 80%, 100% { opacity: 0.2; transform: scale(0.8); }
-        40% { opacity: 1; transform: scale(1.2); }
+        0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+        40% { opacity: 1; transform: scale(1.3); box-shadow: 0 0 10px rgba(167, 139, 250, 0.6); }
     }
     .thinking-text {
-        font-family: 'Inter', sans-serif;
-        font-size: 0.78rem;
-        color: #444;
+        font-family: 'Outfit', sans-serif;
+        font-size: 0.85rem;
+        color: #c4b5fd;
         letter-spacing: 0.5px;
+        font-weight: 500;
+        animation: pulse-text 2s ease-in-out infinite;
+    }
+    @keyframes pulse-text {
+        0%, 100% { opacity: 0.7; }
+        50% { opacity: 1; }
     }
 </style>
 """, unsafe_allow_html=True)
@@ -316,9 +431,9 @@ with st.sidebar:
     st.markdown("""
     <div style="text-align:center; padding: 1rem 0 0.5rem;">
         <span style="font-family:'Space Grotesk',sans-serif; font-size:1.1rem; font-weight:700;
-                     color:#ccc; letter-spacing: 2px;">⬡ QWEN RAG</span>
+                     color:#f8fafc; letter-spacing: 2px;">⬡ QWEN RAG</span>
         <br>
-        <span style="font-family:'Inter',sans-serif; font-size:0.5rem; color:#333;
+        <span style="font-family:'Inter',sans-serif; font-size:0.55rem; color:#0ea5e9;
                      letter-spacing:4px; text-transform:uppercase;">Advanced Local Pipeline</span>
     </div>
     """, unsafe_allow_html=True)
@@ -328,7 +443,7 @@ with st.sidebar:
     # ─── Models Status ───
     st.markdown('<p class="section-label">Models</p>', unsafe_allow_html=True)
     
-    models_to_check = ["qwen3:8b", "qwen3-embedding:0.6b"]
+    models_to_check = ["qwen3:8b", "qwen3:1.7b", "qwen3-embedding:0.6b", "nomic-embed-text"]
     all_ready = True
     for model in models_to_check:
         if check_model(model):
@@ -342,36 +457,53 @@ with st.sidebar:
 
     st.markdown('<div class="thin-rule"></div>', unsafe_allow_html=True)
 
-    # ─── Settings ───
-    st.markdown('<p class="section-label">Settings</p>', unsafe_allow_html=True)
+    # Pipeline Mode selector
+    def on_pipeline_mode_change():
+        # User swapped modes, which means embedding model swapped, so we must clear the DB.
+        old_mode = st.session_state.get("pipeline_mode", "accurate")
+        new_mode = st.session_state.candidate_mode
+        if old_mode != new_mode:
+            clear_store()
+            if "chunk_count" in st.session_state:
+                st.session_state.chunk_count = 0
+            if "current_files" in st.session_state:
+                st.session_state.current_files = []
+            if "processed_files" in st.session_state:
+                st.session_state.processed_files = set()
+            st.toast("Database cleared due to embedding model change.", icon="🧹")
+
+    mode_options = {
+        "accurate": "🎯 Accurate (qwen3:8b + qwen3-embed, ~4m)",
+        "fast": "🚀 Fast (qwen3:1.7b + nomic-embed, ~30s)"
+    }
     
-    # Lock model to Qwen3:8b
-    st.session_state.model = "qwen3:8b"
-    
-    # Context Size
-    ctx_options = [4096, 8192, 16384, 32768, 65536, 131072]
-    ctx_labels = ["4K", "8K (Default)", "16K", "32K", "64K", "128K"]
-    selected_ctx_idx = st.selectbox(
-        "Context Window Size",
-        options=range(len(ctx_options)),
-        format_func=lambda x: ctx_labels[x],
-        index=1, # Default to 8K to save memory
-        help="Lower values are faster but can't read as much context at once."
+    selected_mode = st.selectbox(
+        "Pipeline Mode",
+        options=list(mode_options.keys()),
+        format_func=lambda x: mode_options[x],
+        index=0 if st.session_state.get("pipeline_mode", "accurate") == "accurate" else 1,
+        key="candidate_mode",
+        on_change=on_pipeline_mode_change,
+        help="Fast uses qwen3:1.7b & nomic-embed. Accurate uses qwen3:8b & qwen3-embedding."
     )
-    st.session_state.num_ctx = ctx_options[selected_ctx_idx]
+    st.session_state.pipeline_mode = selected_mode
     
-    # HyDE Toggle
-    if "use_hyde" not in st.session_state:
-        st.session_state.use_hyde = True
-    use_hyde = st.toggle("Enable HyDE (Slower)", value=st.session_state.use_hyde, help="Doubles response time but improves answer quality.")
-    st.session_state.use_hyde = use_hyde
+    # Map mode to actual models
+    if selected_mode == "fast":
+        st.session_state.model = "qwen3:1.7b"
+        st.session_state.embedding_model = "nomic-embed-text"
+    else:
+        st.session_state.model = "qwen3:8b"
+        st.session_state.embedding_model = "qwen3-embedding:0.6b"
+    
+    st.markdown('</div>', unsafe_allow_html=True)
     st.markdown('<div class="thin-rule"></div>', unsafe_allow_html=True)
 
     # ─── Document Upload ───
     st.markdown('<p class="section-label">Documents</p>', unsafe_allow_html=True)
     uploaded_files = st.file_uploader(
         "Upload files",
-        type=["pdf", "txt", "docx", "pptx", "xlsx", "xls", "csv"],
+        type=["pdf", "txt", "md", "docx", "pptx", "xlsx", "xls", "csv"],
         accept_multiple_files=True,
         label_visibility="collapsed",
     )
@@ -384,8 +516,8 @@ with st.sidebar:
         chunk_count = st.session_state.get("chunk_count", 0)
         st.markdown(f"""
         <div style="text-align:center; padding:4px 0;">
-            <span style="font-family:'Space Grotesk',sans-serif; font-size:1rem; color:#666;">{count}</span>
-            <span style="font-family:'Inter',sans-serif; font-size:0.55rem; color:#333; letter-spacing:1px;"> files</span>
+            <span style="font-family:'Space Grotesk',sans-serif; font-size:1rem; color:#f8fafc;">{count}</span>
+            <span style="font-family:'Inter',sans-serif; font-size:0.55rem; color:#0ea5e9; letter-spacing:1px;"> files</span>
         </div>
         """, unsafe_allow_html=True)
 
@@ -406,9 +538,7 @@ with st.sidebar:
     # ─── Pipeline Info ───
     st.markdown('<p class="section-label">Pipeline</p>', unsafe_allow_html=True)
     pipeline_stages = ["HyDE", "Dense MMR", "BM25", "RRF", "FlashRank", "Reorder", "Generate"]
-    if not st.session_state.get("use_hyde", True):
-        pipeline_stages.remove("HyDE")
-    stage_html = " → ".join([f'<span class="pipeline-step">{s}</span>' for s in pipeline_stages])
+    stage_html = "".join([f'<span class="pipeline-step">{s}</span>' for s in pipeline_stages])
     st.markdown(f'<div style="line-height:2;">{stage_html}</div>', unsafe_allow_html=True)
     
     st.markdown('<div class="thin-rule"></div>', unsafe_allow_html=True)
@@ -416,10 +546,10 @@ with st.sidebar:
     # ─── Stats ───
     st.markdown('<p class="section-label">Stats</p>', unsafe_allow_html=True)
     st.markdown(f"""
-    <div style="font-size:0.72rem; color:#444; font-family:'Inter',sans-serif; line-height:2;">
-        Chunks: <span style="color:#666;">{st.session_state.get('chunk_count', 0)}</span><br>
-        Messages: <span style="color:#666;">{len(st.session_state.get('messages', []))}</span><br>
-        Memory: <span style="color:#666;">{'Active' if memory_exists() else 'Empty'}</span>
+    <div style="font-size:0.72rem; color:#737373; font-family:'Inter',sans-serif; line-height:2;">
+        Chunks: <span style="color:#a3a3a3;">{st.session_state.get('chunk_count', 0)}</span><br>
+        Messages: <span style="color:#a3a3a3;">{len(st.session_state.get('messages', []))}</span><br>
+        Memory: <span style="color:#a3a3a3;">{'Active' if memory_exists() else 'Empty'}</span>
     </div>
     """, unsafe_allow_html=True)
 
@@ -490,7 +620,7 @@ if uploaded_files:
                 all_docs = process_batch(file_pairs)
                 
                 if all_docs:
-                    _, num_chunks = build_vector_store(all_docs)
+                    _, num_chunks = build_vector_store(all_docs, st.session_state.get("embedding_model", "qwen3-embedding:0.6b"))
                     st.session_state.current_files = file_names
                     st.session_state.chunk_count = num_chunks
                     log.info(f"Batch complete: {len(file_names)} files, {num_chunks} chunks")
@@ -516,7 +646,9 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 
 for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
+    # Use emojis instead of material icon names to prevent broken text rendering
+    avatar = "🧑‍💻" if message["role"] == "user" else "🧠"
+    with st.chat_message(message["role"], avatar=avatar):
         st.markdown(message["content"])
         # Show sources for assistant messages
         if message["role"] == "assistant" and "sources" in message and message["sources"]:
@@ -552,25 +684,50 @@ user_query = st.chat_input("Ask anything about your documents...")
 if user_query:
     st.session_state.messages.append({"role": "user", "content": user_query})
 
-    with st.chat_message("user"):
+    with st.chat_message("user", avatar="🧑‍💻"):
         st.markdown(user_query)
 
-    with st.chat_message("assistant"):
+    with st.chat_message("assistant", avatar="🧠"):
         st_placeholder = st.empty()
         st_placeholder.markdown(THINKING_HTML, unsafe_allow_html=True)
 
         try:
             log.info(f"User query: '{user_query[:100]}...'")
-            result = ask(
+            
+            # Start generator
+            result_gen = ask(
                 question=user_query,
                 chat_history=st.session_state.messages[:-1],  # exclude current
-                use_hyde=st.session_state.get("use_hyde", True),
-                num_ctx=st.session_state.get("num_ctx", 8192)
+                num_ctx=st.session_state.get("num_ctx", 8192),
+                model_name=st.session_state.get("model", "qwen3:8b"),
+                embedding_model_name=st.session_state.get("embedding_model", "qwen3-embedding:0.6b")
             )
+            
+            answer = ""
+            sources = []
+            pipeline = {}
+            
+            # Process stream
+            for chunk in result_gen:
+                if isinstance(chunk, dict) and chunk.get("is_meta"):
+                    # Final metadata block
+                    answer = chunk["full_answer"]
+                    sources = chunk.get("sources", [])
+                    pipeline = chunk.get("pipeline", {})
+                elif isinstance(chunk, str):
+                    # Text token streaming
+                    answer += chunk
+                    # Real-time UI update
+                    st_placeholder.markdown(answer.replace("$", r"\$") + "▌")
+                elif isinstance(chunk, dict) and "answer" in chunk:
+                    # Fallback for the non-streaming error messages (e.g. no documents)
+                    answer = chunk["answer"]
+                    sources = chunk.get("sources", [])
+                    pipeline = chunk.get("pipeline", {})
+                    st_placeholder.markdown(answer.replace("$", r"\$"))
 
-            answer = result["answer"]
-            sources = result.get("sources", [])
-            pipeline = result.get("pipeline", {})
+            # Final clean display without cursor
+            st_placeholder.markdown(answer.replace("$", r"\$"))
 
             # Display answer
             st_placeholder.markdown(answer.replace("$", r"\$"))

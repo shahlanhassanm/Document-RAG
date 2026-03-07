@@ -9,7 +9,7 @@ from core.logger import get_logger
 log = get_logger("reranker")
 
 
-def rerank(query: str, documents: list[Document], top_k: int = 6) -> list[Document]:
+def rerank(query: str, documents: list[Document], top_k: int = 6, min_score: float = 0.0) -> list[Document]:
     """
     Rerank documents using FlashRank cross-encoder.
     
@@ -20,9 +20,11 @@ def rerank(query: str, documents: list[Document], top_k: int = 6) -> list[Docume
         query: User's search query
         documents: Candidate documents from hybrid search
         top_k: Number of top results to return
+        min_score: Minimum cross-encoder score threshold to accept a document.
+                   (Flashrank scores range 0-1. Set low to avoid dropping multi-topic results)
     
     Returns:
-        Top-k documents reranked by cross-attention score
+        Top-k documents reranked by cross-attention score that pass the threshold
     """
     if not documents:
         return []
@@ -43,13 +45,23 @@ def rerank(query: str, documents: list[Document], top_k: int = 6) -> list[Docume
         rerank_request = RerankRequest(query=query, passages=passages)
         results = ranker.rerank(rerank_request)
         
-        # Rebuild Document objects in reranked order
+        # Rebuild Document objects in reranked order, keeping only those above threshold
         reranked_docs = []
-        for result in results[:top_k]:
+        for result in results:
+            score = result["score"]
             idx = result["id"]
-            reranked_docs.append(documents[idx])
+            source = documents[idx].metadata.get("source", "unknown")
+            log.debug(f"  Rerank score: {score:.4f} | source: {source} | text: '{documents[idx].page_content[:80]}...'")
+            
+            if score >= min_score:
+                reranked_docs.append(documents[idx])
+            else:
+                log.debug(f"  ⛔ Filtered out (score {score:.4f} < {min_score})")
+                
+            if len(reranked_docs) >= top_k:
+                break
         
-        log.info(f"Reranking complete: {len(documents)} -> top {len(reranked_docs)}")
+        log.info(f"Reranking complete: {len(documents)} -> top {len(reranked_docs)} (threshold >= {min_score})")
         return reranked_docs
         
     except Exception as e:

@@ -89,15 +89,15 @@ def format_memory(exchanges: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def ask(question: str, chat_history: list[dict] = None, use_hyde: bool = True, num_ctx: int = 8192) -> dict:
+def ask(question: str, chat_history: list[dict] = None, num_ctx: int = 8192, model_name: str = "qwen3:8b", embedding_model_name: str = "qwen3-embedding:0.6b") -> dict:
     """
     Full RAG pipeline: HyDE → Hybrid Search → Rerank → Reorder → Generate.
     
     Args:
         question: User's question
         chat_history: List of {"role": ..., "content": ...} message dicts
-        use_hyde: Whether to apply HyDE query transformation
         num_ctx: Context window size for the LLM
+        model_name: Ollama model to use for generation
     
     Returns:
         dict with keys:
@@ -109,49 +109,34 @@ def ask(question: str, chat_history: list[dict] = None, use_hyde: bool = True, n
     pipeline_stats = {}
     
     if not store_exists():
-        # No documents uploaded — general chat mode
-        log.info("No documents in store — using general chat mode")
-        history_str = get_recent_messages(chat_history, n=5)
-        history_section = f"Recent conversation:\n{history_str}" if history_str else ""
-        
-        prompt = GENERAL_PROMPT.format(
-            history=history_section,
-            question=question,
-        )
-        
-        llm = get_llm(num_ctx=num_ctx)
-        answer = llm.invoke(prompt)
-        
-        # Clean thinking tags
-        if "</think>" in answer:
-            answer = answer.split("</think>")[-1].strip()
-        
-        return {
-            "answer": answer,
+        # No documents uploaded
+        log.info("No documents in store")
+        yield {
+            "answer": "No documents uploaded. Please upload a document from the sidebar to ask questions.",
             "sources": [],
-            "pipeline": {"mode": "general_chat"},
+            "pipeline": {"mode": "no_documents"},
         }
+        return
     
     # === RAG MODE ===
     log.info(f"RAG pipeline started for: '{question[:80]}...'")
     
-    # Stage 1: HyDE Query Transform
-    search_query = question
-    if use_hyde:
-        search_query = hyde_transform(question)
-        pipeline_stats["hyde"] = search_query[:100]
+    # Stage 1: HyDE Query Transform (always on)
+    search_query = hyde_transform(question, model_name=model_name)
+    pipeline_stats["hyde"] = search_query[:100]
     
     # Stage 2: Hybrid Search (Dense MMR + BM25 + RRF)
-    candidates = hybrid_search_rrf(search_query, k=6, fetch_k=20)
+    candidates = hybrid_search_rrf(search_query, original_query=question, k=6, fetch_k=20, embedding_model_name=embedding_model_name)
     pipeline_stats["candidates_found"] = len(candidates)
     
     if not candidates:
         log.warning("No candidates found from hybrid search")
-        return {
+        yield {
             "answer": "I could not find any relevant information in the uploaded documents.",
             "sources": [],
             "pipeline": pipeline_stats,
         }
+        return
     
     # Stage 3: FlashRank Reranking
     reranked = rerank(question, candidates, top_k=6)  # Use original question for reranking
@@ -181,17 +166,9 @@ def ask(question: str, chat_history: list[dict] = None, use_hyde: bool = True, n
         question=question,
     )
     
-    # Stage 5: Generate with qwen3:8b
-    log.info("Generating answer with qwen3:8b")
-    llm = get_llm()
-    answer = llm.invoke(prompt)
-    
-    # Clean thinking tags from qwen3
-    if "</think>" in answer:
-        answer = answer.split("</think>")[-1].strip()
-    
-    pipeline_stats["mode"] = "rag"
-    log.info(f"RAG pipeline complete. Answer length: {len(answer)} chars")
+    # Stage 5: Generate with LLM (Streaming)
+    log.info(f"Starting streaming generation with {model_name}")
+    llm = get_llm(model_name=model_name)
     
     # Collect source info
     sources = []
@@ -205,9 +182,33 @@ def ask(question: str, chat_history: list[dict] = None, use_hyde: bool = True, n
         if "sheet" in meta:
             source_info["sheet"] = meta["sheet"]
         sources.append(source_info)
+        
+    pipeline_stats["mode"] = "rag"
     
-    return {
-        "answer": answer,
+    # We yield tokens first, then yield a dict with metadata at the very end
+    full_answer = ""
+    in_think_block = False
+    
+    for chunk in llm.stream(prompt):
+        text = chunk
+        full_answer += text
+        
+        # Simple heuristic to strip <think> tags from streaming output
+        if "<think>" in full_answer and "</think>" not in full_answer:
+            continue
+        elif "</think>" in text:
+            text = text.split("</think>")[-1]
+            if not text:
+                continue
+                
+        yield text
+
+    log.info(f"RAG streaming complete. Answer length: {len(full_answer)} chars")
+    
+    # Final yield is the metadata block
+    yield {
+        "is_meta": True,
+        "full_answer": full_answer,
         "sources": sources,
         "pipeline": pipeline_stats,
     }
